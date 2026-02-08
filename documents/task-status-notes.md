@@ -28,3 +28,11 @@ Use this file to append notes at the end of each completed task. Keep entries co
 - Follow-ups / next steps: Run local server and manually test thresholds with real hangs (desktop + mobile). Adjust defaults as needed.
 - Open questions / risks: Camera facing mode switch requires restart; real-world feet-off-ground heuristic still needs validation.
 - Testing / verification: Not run yet (requires webcam).
+
+- Date: 2026-02-08
+- Task completed: Added sound feedback toggle + tone gating; added timeline markers for start/end on review slider.
+- Files touched: /Users/mdn/Projects/deadhang-monitor/index.html
+- Decisions / rationale: Sound uses Web Audio oscillator (432 Hz) with gain ramp; tone active when not hanging and stops during hang; toggle stored in settings; timeline markers show start/end positions for review.
+- Follow-ups / next steps: Manually verify audio behavior on desktop/mobile (auto-play restrictions); validate marker positions after adjustments.
+- Open questions / risks: AudioContext resume may require user gesture if toggled during detection; adjust tone volume if too loud.
+- Testing / verification: Not run yet.
