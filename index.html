@@ -75,6 +75,7 @@
             display: flex;
             flex-direction: column;
             gap: 6px;
+            min-height: 120px;
         }
 
         header h1 {
@@ -89,6 +90,29 @@
             max-width: 680px;
             color: var(--ink-soft);
             font-size: 0.95rem;
+        }
+
+        .header-default {
+            display: grid;
+            gap: 6px;
+        }
+
+        .header-timer {
+            display: none;
+            align-items: center;
+            justify-content: center;
+            min-height: 120px;
+        }
+
+        .header-timer.active {
+            display: flex;
+        }
+
+        .header-timer span {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: clamp(2.6rem, 6vw, 4.6rem);
+            letter-spacing: 0.08em;
+            color: var(--accent-dark);
         }
 
         .main-grid {
@@ -384,8 +408,13 @@
     <div class="version-tag">v.__DEPLOY_VERSION__</div>
     <div class="app-shell">
         <header>
-            <h1>Deadhang Monitor</h1>
-            <p>Track dead hang duration using real-time pose detection. All processing stays in your browser.</p>
+            <div class="header-default" id="headerDefault">
+                <h1>Deadhang Monitor</h1>
+                <p>Track dead hang duration using real-time pose detection. All processing stays in your browser.</p>
+            </div>
+            <div class="header-timer" id="headerTimer">
+                <span id="headerTimerValue">00:00</span>
+            </div>
         </header>
 
         <section class="main-grid">
@@ -553,6 +582,8 @@
             notHangCandidateCount: 0,
             selectedSession: null,
             currentIsHang: false,
+            hangActive: false,
+            showHeaderTimer: false,
             soundEnabled: false,
             audioContext: null,
             toneOscillator: null,
@@ -576,6 +607,9 @@
             elbowAngleState: document.getElementById('elbowAngleState'),
             kneeAngleState: document.getElementById('kneeAngleState'),
             confidenceState: document.getElementById('confidenceState'),
+            headerDefault: document.getElementById('headerDefault'),
+            headerTimer: document.getElementById('headerTimer'),
+            headerTimerValue: document.getElementById('headerTimerValue'),
             video: document.getElementById('video'),
             canvas: document.getElementById('output'),
             historyList: document.getElementById('historyList'),
@@ -612,6 +646,13 @@
             return `${(ms / 1000).toFixed(1)}s`;
         }
 
+        function formatTimer(ms) {
+            const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+            const minutes = Math.floor(totalSeconds / 60);
+            const seconds = totalSeconds % 60;
+            return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+        }
+
         function updateSoundButton() {
             dom.soundBtn.innerText = state.soundEnabled ? 'Sound: On' : 'Sound: Off';
         }
@@ -640,6 +681,25 @@
             state.toneGain.gain.cancelScheduledValues(now);
             state.toneGain.gain.setTargetAtTime(target, now, 0.05);
             state.toneActive = active;
+        }
+
+        function updateHeaderTimer(durationMs) {
+            if (!state.showHeaderTimer) {
+                dom.headerTimer.classList.remove('active');
+                dom.headerDefault.style.display = 'grid';
+                return;
+            }
+            dom.headerTimer.classList.add('active');
+            dom.headerDefault.style.display = 'none';
+            dom.headerTimerValue.innerText = formatTimer(durationMs);
+        }
+
+        function syncSoundWithHangState() {
+            if (!state.soundEnabled || !state.isDetecting) {
+                setToneActive(false);
+                return;
+            }
+            setToneActive(!state.hangActive);
         }
 
         function settingsSnapshot() {
@@ -825,6 +885,7 @@
             state.hangCandidateCount = 0;
             state.notHangCandidateCount = 0;
             state.currentIsHang = false;
+            state.hangActive = false;
             updateLiveStatus({
                 status: 'Ready',
                 durationMs: 0,
@@ -834,6 +895,7 @@
                 elbowAngleText: '-',
                 kneeAngleText: '-'
             });
+            updateHeaderTimer(0);
         }
 
         async function setupDetector() {
@@ -882,6 +944,7 @@
             dom.canvas.height = dom.video.videoHeight;
 
             resetSessionState();
+            state.showHeaderTimer = false;
             state.isDetecting = true;
             dom.stopBtn.disabled = false;
             dom.resetBtn.disabled = false;
@@ -890,7 +953,7 @@
 
             if (state.soundEnabled) {
                 ensureAudioContext();
-                setToneActive(true);
+                syncSoundWithHangState();
             }
 
             detectLoop();
@@ -912,6 +975,8 @@
             dom.stopBtn.disabled = true;
             dom.resetBtn.disabled = true;
 
+            state.showHeaderTimer = false;
+            updateHeaderTimer(0);
             setToneActive(false);
             if (state.audioContext && state.audioContext.state === 'running') {
                 state.audioContext.suspend();
@@ -926,9 +991,7 @@
         function resetLiveSession() {
             if (!state.isDetecting) return;
             resetSessionState();
-            if (state.soundEnabled) {
-                setToneActive(true);
-            }
+            syncSoundWithHangState();
         }
 
         function drawPose(ctx, keypoints, scaleX, scaleY) {
@@ -978,6 +1041,15 @@
             if (isHang && state.hangEndTime !== null) {
                 state.hangEndTime = null;
             }
+
+            const wasActive = state.hangActive;
+            state.hangActive = state.hangStartTime !== null && state.hangEndTime === null;
+            if (state.hangActive && !state.showHeaderTimer) {
+                state.showHeaderTimer = true;
+            }
+            if (wasActive !== state.hangActive) {
+                syncSoundWithHangState();
+            }
         }
 
         function computeDuration(nowMs) {
@@ -1001,9 +1073,7 @@
             if (!poses.length) {
                 updateHangState(false, nowMs);
                 state.currentIsHang = false;
-                if (state.soundEnabled) {
-                    setToneActive(true);
-                }
+                updateHeaderTimer(computeDuration(nowMs));
                 updateLiveStatus({
                     status: 'Not detected',
                     durationMs: computeDuration(nowMs),
@@ -1025,9 +1095,7 @@
             if (!best) {
                 updateHangState(false, nowMs);
                 state.currentIsHang = false;
-                if (state.soundEnabled) {
-                    setToneActive(true);
-                }
+                updateHeaderTimer(computeDuration(nowMs));
                 updateLiveStatus({
                     status: 'Not detected',
                     durationMs: computeDuration(nowMs),
@@ -1043,9 +1111,7 @@
             const isHang = metrics.elbowStraight && metrics.wristAboveShoulder && metrics.feetOff;
             updateHangState(isHang, nowMs);
             state.currentIsHang = isHang;
-            if (state.soundEnabled) {
-                setToneActive(!isHang);
-            }
+            updateHeaderTimer(computeDuration(nowMs));
 
             if (nowMs - state.lastSampleTime >= CONF.sampleIntervalMs) {
                 state.lastSampleTime = nowMs;
@@ -1302,7 +1368,7 @@
             if (state.soundEnabled) {
                 ensureAudioContext();
                 if (state.isDetecting) {
-                    setToneActive(!state.currentIsHang);
+                    syncSoundWithHangState();
                 }
             } else {
                 setToneActive(false);

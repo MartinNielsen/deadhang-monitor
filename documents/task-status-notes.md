@@ -36,3 +36,11 @@ Use this file to append notes at the end of each completed task. Keep entries co
 - Follow-ups / next steps: Manually verify audio behavior on desktop/mobile (auto-play restrictions); validate marker positions after adjustments.
 - Open questions / risks: AudioContext resume may require user gesture if toggled during detection; adjust tone volume if too loud.
 - Testing / verification: Not run yet.
+
+- Date: 2026-02-08
+- Task completed: Header switches to large timer during hang; sound gating uses debounced hang state; added timeline start/end markers.
+- Files touched: /Users/mdn/Projects/deadhang-monitor/index.html
+- Decisions / rationale: Header timer persists once a hang is detected until camera stop; timer displays mm:ss; sound toggles only when debounced hang state changes to avoid jitter.
+- Follow-ups / next steps: Verify header swap on first hang; confirm tone stays off during slight movement; validate marker positions on review slider.
+- Open questions / risks: None beyond audio autoplay quirks.
+- Testing / verification: Not run yet.
