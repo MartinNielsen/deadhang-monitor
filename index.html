@@ -1,0 +1,1208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" type="image/svg+xml" href="favicon.svg">
+    <link rel="apple-touch-icon" sizes="512x512" href="app-icon.svg">
+    <title>Deadhang Monitor - AI Dead Hang Timer</title>
+    <meta name="description" content="Track dead hang duration with real-time AI pose detection. Privacy-first, runs fully in your browser.">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=Work+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection"></script>
+
+    <style>
+        :root {
+            --gold-1: #FDFBD4;
+            --gold-2: #D4AF37;
+            --gold-3: #BDB76B;
+            --gold-4: #CE8946;
+            --ink: #1e1a14;
+            --ink-soft: rgba(30, 26, 20, 0.7);
+            --surface: rgba(253, 251, 212, 0.92);
+            --surface-strong: #f8f3c6;
+            --accent: #D4AF37;
+            --accent-dark: #8b6c19;
+            --danger: #b74a2b;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+            font-family: 'Work Sans', system-ui, sans-serif;
+            background: radial-gradient(circle at top, rgba(253, 251, 212, 0.9), rgba(206, 137, 70, 0.18)),
+                        linear-gradient(145deg, #f7f1c9 0%, #f6ead1 45%, #e7c89a 100%);
+            color: var(--ink);
+            display: flex;
+            justify-content: center;
+            padding: 32px 18px 64px;
+        }
+
+        .app-shell {
+            width: 100%;
+            max-width: 1040px;
+            display: grid;
+            gap: 24px;
+        }
+
+        .version-tag {
+            position: fixed;
+            top: 16px;
+            right: 16px;
+            background: rgba(30, 26, 20, 0.7);
+            color: #fff;
+            padding: 6px 10px;
+            border-radius: 999px;
+            font-size: 0.7rem;
+            letter-spacing: 0.08em;
+            z-index: 50;
+        }
+
+        header {
+            background: var(--surface);
+            border-radius: 28px;
+            padding: 24px 28px;
+            box-shadow: 0 24px 60px rgba(30, 26, 20, 0.12);
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        header h1 {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: clamp(1.8rem, 2.4vw, 2.5rem);
+            margin: 0;
+            letter-spacing: 0.04em;
+        }
+
+        header p {
+            margin: 0;
+            max-width: 680px;
+            color: var(--ink-soft);
+            font-size: 0.95rem;
+        }
+
+        .main-grid {
+            display: grid;
+            grid-template-columns: 1.4fr 1fr;
+            gap: 24px;
+        }
+
+        .viewer-card {
+            background: var(--surface);
+            border-radius: 28px;
+            padding: 18px;
+            box-shadow: 0 26px 70px rgba(30, 26, 20, 0.16);
+            display: grid;
+            gap: 16px;
+        }
+
+        .viewer-container {
+            position: relative;
+            width: 100%;
+            padding-top: 75%;
+            border-radius: 22px;
+            overflow: hidden;
+            background: linear-gradient(135deg, rgba(212, 175, 55, 0.35), rgba(206, 137, 70, 0.4));
+            box-shadow: inset 0 0 40px rgba(30, 26, 20, 0.18);
+        }
+
+        video, canvas#output {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        video {
+            display: none;
+        }
+
+        .overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            text-align: center;
+            color: #fff;
+            background: rgba(30, 26, 20, 0.7);
+            backdrop-filter: blur(3px);
+            z-index: 4;
+        }
+
+        .overlay.hidden {
+            display: none;
+        }
+
+        .overlay button {
+            margin-top: 16px;
+        }
+
+        .stats-overlay {
+            position: absolute;
+            top: 16px;
+            left: 16px;
+            display: grid;
+            gap: 6px;
+            padding: 12px 16px;
+            border-radius: 16px;
+            background: rgba(253, 251, 212, 0.88);
+            color: var(--ink);
+            font-size: 0.9rem;
+            box-shadow: 0 16px 30px rgba(30, 26, 20, 0.16);
+            z-index: 3;
+        }
+
+        .stats-overlay.hidden {
+            display: none;
+        }
+
+        .stats-overlay span {
+            font-weight: 600;
+            color: var(--accent-dark);
+        }
+
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+
+        button {
+            font-family: 'Work Sans', sans-serif;
+            font-weight: 600;
+            border-radius: 999px;
+            border: none;
+            padding: 10px 18px;
+            cursor: pointer;
+            background: var(--accent);
+            color: #2d220f;
+            box-shadow: 0 14px 30px rgba(212, 175, 55, 0.35);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        button.secondary {
+            background: var(--surface-strong);
+            color: var(--ink);
+            box-shadow: none;
+            border: 1px solid rgba(30, 26, 20, 0.15);
+        }
+
+        button.danger {
+            background: var(--danger);
+            color: #fff;
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+
+        button:hover:not(:disabled) {
+            transform: translateY(-1px);
+            box-shadow: 0 18px 34px rgba(30, 26, 20, 0.22);
+        }
+
+        .side-panel {
+            display: grid;
+            gap: 18px;
+        }
+
+        .panel-card {
+            background: var(--surface);
+            border-radius: 22px;
+            padding: 18px;
+            box-shadow: 0 20px 50px rgba(30, 26, 20, 0.1);
+        }
+
+        .panel-card h2 {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 1.4rem;
+            margin: 0 0 8px;
+        }
+
+        .status-line {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.95rem;
+            color: var(--ink-soft);
+            margin-bottom: 6px;
+        }
+
+        .status-line strong {
+            color: var(--ink);
+        }
+
+        .tuning-grid {
+            display: grid;
+            gap: 10px;
+        }
+
+        .tuning-row {
+            display: grid;
+            gap: 6px;
+        }
+
+        .tuning-row label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.85rem;
+            color: var(--ink-soft);
+        }
+
+        .tuning-row input[type=\"range\"],
+        .tuning-row select {
+            width: 100%;
+        }
+
+        .tuning-note {
+            font-size: 0.75rem;
+            color: var(--ink-soft);
+        }
+
+        .history-list {
+            display: grid;
+            gap: 10px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .history-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 12px;
+            border-radius: 14px;
+            background: rgba(255, 255, 255, 0.75);
+            border: 1px solid rgba(30, 26, 20, 0.08);
+        }
+
+        .history-item button {
+            padding: 6px 12px;
+            font-size: 0.8rem;
+        }
+
+        .review-panel {
+            display: none;
+            gap: 12px;
+            margin-top: 12px;
+        }
+
+        .review-panel.active {
+            display: grid;
+        }
+
+        .timeline {
+            background: rgba(253, 251, 212, 0.7);
+            border-radius: 16px;
+            padding: 12px;
+            display: grid;
+            gap: 10px;
+        }
+
+        .timeline input[type="range"] {
+            width: 100%;
+        }
+
+        .timeline-meta {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.85rem;
+            color: var(--ink-soft);
+        }
+
+        .timeline-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .small-pill {
+            background: rgba(30, 26, 20, 0.08);
+            padding: 4px 8px;
+            border-radius: 999px;
+            font-size: 0.75rem;
+            color: var(--ink);
+        }
+
+        @media (max-width: 960px) {
+            .main-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="version-tag">v.__DEPLOY_VERSION__</div>
+    <div class="app-shell">
+        <header>
+            <h1>Deadhang Monitor</h1>
+            <p>Track dead hang duration using real-time pose detection. All processing stays in your browser.</p>
+        </header>
+
+        <section class="main-grid">
+            <div class="viewer-card">
+                <div class="viewer-container">
+                    <div class="overlay" id="instructionOverlay">
+                        <div>
+                            <div style="font-size:1.05rem; font-weight:600;">Position the camera so your full body is visible.</div>
+                            <div style="margin-top:8px; font-size:0.9rem; opacity:0.85;">Press Start, hang, then Stop to save the session.</div>
+                            <button id="startBtn">Start</button>
+                        </div>
+                    </div>
+                    <div class="overlay hidden" id="loadingOverlay">
+                        <div>
+                            <div style="font-size:1rem; font-weight:600;">Loading model & camera…</div>
+                            <div style="margin-top:6px; font-size:0.85rem; opacity:0.85;" id="loadingText">Preparing MoveNet</div>
+                        </div>
+                    </div>
+                    <div class="stats-overlay hidden" id="statsOverlay">
+                        <div>Duration: <span id="durationDisplay">0.0s</span></div>
+                        <div>Status: <span id="statusDisplay">Ready</span></div>
+                    </div>
+                    <video id="video" autoplay playsinline></video>
+                    <canvas id="output"></canvas>
+                </div>
+                <div class="controls">
+                    <button id="stopBtn" class="danger" disabled>Stop</button>
+                    <button id="resetBtn" class="secondary" disabled>Reset</button>
+                </div>
+            </div>
+
+            <div class="side-panel">
+                <div class="panel-card">
+                    <h2>Live Session</h2>
+                    <div class="status-line">Detection: <strong id="detectionState">Idle</strong></div>
+                    <div class="status-line">Arms: <strong id="armsState">-</strong></div>
+                    <div class="status-line">Feet: <strong id="feetState">-</strong></div>
+                    <div class="status-line">Elbow: <strong id="elbowAngleState">-</strong></div>
+                    <div class="status-line">Knee: <strong id="kneeAngleState">-</strong></div>
+                    <div class="status-line">Confidence: <strong id="confidenceState">-</strong></div>
+                </div>
+
+                <div class="panel-card">
+                    <h2>History</h2>
+                    <div class="history-list" id="historyList">
+                        <div style="color:var(--ink-soft); font-size:0.9rem;">No sessions yet.</div>
+                    </div>
+                    <div style="margin-top:10px; display:flex; gap:10px; flex-wrap:wrap;">
+                        <button class="secondary" id="refreshHistoryBtn">Refresh</button>
+                        <button class="danger" id="deleteAllBtn">Delete All</button>
+                    </div>
+
+                    <div class="review-panel" id="reviewPanel">
+                        <div class="small-pill" id="reviewMeta">Session</div>
+                        <div class="timeline">
+                            <div class="timeline-meta">
+                                <span>Scrub: <strong id="scrubTime">0.0s</strong></span>
+                                <span>Duration: <strong id="reviewDuration">0.0s</strong></span>
+                            </div>
+                            <input type="range" id="scrubRange" min="0" max="0" value="0">
+                            <div class="timeline-actions">
+                                <button class="secondary" id="setStartBtn">Set Start</button>
+                                <button class="secondary" id="setEndBtn">Set End</button>
+                                <button id="saveAdjustBtn">Save Adjustments</button>
+                                <button class="danger" id="deleteSessionBtn">Delete</button>
+                            </div>
+                            <div class="timeline-meta">
+                                <span>Start: <strong id="startTimeLabel">0.0s</strong></span>
+                                <span>End: <strong id="endTimeLabel">0.0s</strong></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="panel-card">
+                    <h2>Tuning</h2>
+                    <div class="tuning-grid">
+                        <div class="tuning-row">
+                            <label>Min confidence <span id="minConfidenceValue">0.30</span></label>
+                            <input type="range" id="minConfidenceInput" min="0.1" max="0.7" step="0.05" value="0.3">
+                        </div>
+                        <div class="tuning-row">
+                            <label>Elbow straight (°) <span id="elbowStraightValue">165</span></label>
+                            <input type="range" id="elbowStraightInput" min="140" max="180" step="1" value="165">
+                        </div>
+                        <div class="tuning-row">
+                            <label>Knee bent (°) <span id="kneeBentValue">150</span></label>
+                            <input type="range" id="kneeBentInput" min="90" max="180" step="1" value="150">
+                        </div>
+                        <div class="tuning-row">
+                            <label>Feet lift factor <span id="feetLiftValue">0.85</span></label>
+                            <input type="range" id="feetLiftInput" min="0.5" max="1.1" step="0.01" value="0.85">
+                        </div>
+                        <div class="tuning-row">
+                            <label>Overhead margin (px) <span id="overheadMarginValue">10</span></label>
+                            <input type="range" id="overheadMarginInput" min="0" max="40" step="1" value="10">
+                        </div>
+                        <div class="tuning-row">
+                            <label>Camera</label>
+                            <select id="facingModeSelect">
+                                <option value="user">Front</option>
+                                <option value="environment">Rear</option>
+                            </select>
+                        </div>
+                        <div class="tuning-note">Restart detection to apply camera changes.</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <script>
+        const CONF = {
+            videoWidth: 640,
+            videoHeight: 480,
+            minConfidence: 0.3,
+            elbowStraightThresh: 165,
+            kneeBentThresh: 150,
+            overheadMargin: 10,
+            feetLiftFactor: 0.85,
+            sampleIntervalMs: 100,
+            facingMode: 'user'
+        };
+
+        const SETTINGS_KEY = 'deadhangSettings';
+
+        const KEYPOINTS = [
+            'nose','left_eye','right_eye','left_ear','right_ear',
+            'left_shoulder','right_shoulder','left_elbow','right_elbow',
+            'left_wrist','right_wrist','left_hip','right_hip','left_knee','right_knee','left_ankle','right_ankle'
+        ];
+
+        const SKELETON = [
+            ['left_shoulder','right_shoulder'],
+            ['left_shoulder','left_elbow'],
+            ['left_elbow','left_wrist'],
+            ['right_shoulder','right_elbow'],
+            ['right_elbow','right_wrist'],
+            ['left_shoulder','left_hip'],
+            ['right_shoulder','right_hip'],
+            ['left_hip','right_hip'],
+            ['left_hip','left_knee'],
+            ['left_knee','left_ankle'],
+            ['right_hip','right_knee'],
+            ['right_knee','right_ankle']
+        ];
+
+        const state = {
+            isDetecting: false,
+            detector: null,
+            animationFrameId: null,
+            videoStream: null,
+            sessionStartPerf: null,
+            sessionStartEpoch: null,
+            lastSampleTime: 0,
+            frames: [],
+            hangStartTime: null,
+            hangEndTime: null,
+            hangCandidateCount: 0,
+            notHangCandidateCount: 0,
+            selectedSession: null
+        };
+
+        const dom = {
+            startBtn: document.getElementById('startBtn'),
+            stopBtn: document.getElementById('stopBtn'),
+            resetBtn: document.getElementById('resetBtn'),
+            instructionOverlay: document.getElementById('instructionOverlay'),
+            loadingOverlay: document.getElementById('loadingOverlay'),
+            loadingText: document.getElementById('loadingText'),
+            statsOverlay: document.getElementById('statsOverlay'),
+            durationDisplay: document.getElementById('durationDisplay'),
+            statusDisplay: document.getElementById('statusDisplay'),
+            detectionState: document.getElementById('detectionState'),
+            armsState: document.getElementById('armsState'),
+            feetState: document.getElementById('feetState'),
+            elbowAngleState: document.getElementById('elbowAngleState'),
+            kneeAngleState: document.getElementById('kneeAngleState'),
+            confidenceState: document.getElementById('confidenceState'),
+            video: document.getElementById('video'),
+            canvas: document.getElementById('output'),
+            historyList: document.getElementById('historyList'),
+            refreshHistoryBtn: document.getElementById('refreshHistoryBtn'),
+            deleteAllBtn: document.getElementById('deleteAllBtn'),
+            reviewPanel: document.getElementById('reviewPanel'),
+            reviewMeta: document.getElementById('reviewMeta'),
+            scrubRange: document.getElementById('scrubRange'),
+            scrubTime: document.getElementById('scrubTime'),
+            reviewDuration: document.getElementById('reviewDuration'),
+            setStartBtn: document.getElementById('setStartBtn'),
+            setEndBtn: document.getElementById('setEndBtn'),
+            saveAdjustBtn: document.getElementById('saveAdjustBtn'),
+            deleteSessionBtn: document.getElementById('deleteSessionBtn'),
+            startTimeLabel: document.getElementById('startTimeLabel'),
+            endTimeLabel: document.getElementById('endTimeLabel'),
+            minConfidenceInput: document.getElementById('minConfidenceInput'),
+            minConfidenceValue: document.getElementById('minConfidenceValue'),
+            elbowStraightInput: document.getElementById('elbowStraightInput'),
+            elbowStraightValue: document.getElementById('elbowStraightValue'),
+            kneeBentInput: document.getElementById('kneeBentInput'),
+            kneeBentValue: document.getElementById('kneeBentValue'),
+            feetLiftInput: document.getElementById('feetLiftInput'),
+            feetLiftValue: document.getElementById('feetLiftValue'),
+            overheadMarginInput: document.getElementById('overheadMarginInput'),
+            overheadMarginValue: document.getElementById('overheadMarginValue'),
+            facingModeSelect: document.getElementById('facingModeSelect')
+        };
+
+        function formatSeconds(ms) {
+            return `${(ms / 1000).toFixed(1)}s`;
+        }
+
+        function settingsSnapshot() {
+            return {
+                minConfidence: CONF.minConfidence,
+                elbowStraightThresh: CONF.elbowStraightThresh,
+                kneeBentThresh: CONF.kneeBentThresh,
+                feetLiftFactor: CONF.feetLiftFactor,
+                overheadMargin: CONF.overheadMargin,
+                facingMode: CONF.facingMode
+            };
+        }
+
+        function persistSettings() {
+            localStorage.setItem(SETTINGS_KEY, JSON.stringify(settingsSnapshot()));
+        }
+
+        function applySettingsToUI(fields) {
+            fields.forEach((field) => {
+                field.input.value = String(CONF[field.key]);
+                field.valueEl.innerText = field.format(CONF[field.key]);
+            });
+            dom.facingModeSelect.value = CONF.facingMode;
+        }
+
+        function initSettings() {
+            const fields = [
+                {
+                    key: 'minConfidence',
+                    input: dom.minConfidenceInput,
+                    valueEl: dom.minConfidenceValue,
+                    format: (value) => Number(value).toFixed(2),
+                    parser: (value) => parseFloat(value)
+                },
+                {
+                    key: 'elbowStraightThresh',
+                    input: dom.elbowStraightInput,
+                    valueEl: dom.elbowStraightValue,
+                    format: (value) => `${Math.round(value)}`,
+                    parser: (value) => parseInt(value, 10)
+                },
+                {
+                    key: 'kneeBentThresh',
+                    input: dom.kneeBentInput,
+                    valueEl: dom.kneeBentValue,
+                    format: (value) => `${Math.round(value)}`,
+                    parser: (value) => parseInt(value, 10)
+                },
+                {
+                    key: 'feetLiftFactor',
+                    input: dom.feetLiftInput,
+                    valueEl: dom.feetLiftValue,
+                    format: (value) => Number(value).toFixed(2),
+                    parser: (value) => parseFloat(value)
+                },
+                {
+                    key: 'overheadMargin',
+                    input: dom.overheadMarginInput,
+                    valueEl: dom.overheadMarginValue,
+                    format: (value) => `${Math.round(value)}`,
+                    parser: (value) => parseInt(value, 10)
+                }
+            ];
+
+            const raw = localStorage.getItem(SETTINGS_KEY);
+            if (raw) {
+                try {
+                    const saved = JSON.parse(raw);
+                    fields.forEach((field) => {
+                        if (saved[field.key] !== undefined) {
+                            CONF[field.key] = field.parser(saved[field.key]);
+                        }
+                    });
+                    if (saved.facingMode) {
+                        CONF.facingMode = saved.facingMode;
+                    }
+                } catch (error) {
+                    console.warn('Failed to load settings', error);
+                }
+            }
+
+            applySettingsToUI(fields);
+
+            fields.forEach((field) => {
+                field.input.addEventListener('input', (event) => {
+                    CONF[field.key] = field.parser(event.target.value);
+                    field.valueEl.innerText = field.format(CONF[field.key]);
+                    persistSettings();
+                });
+            });
+
+            dom.facingModeSelect.addEventListener('change', (event) => {
+                CONF.facingMode = event.target.value;
+                persistSettings();
+            });
+        }
+
+        function angleAt(a, b, c) {
+            const ab = { x: a.x - b.x, y: a.y - b.y };
+            const cb = { x: c.x - b.x, y: c.y - b.y };
+            const dot = ab.x * cb.x + ab.y * cb.y;
+            const mag = Math.hypot(ab.x, ab.y) * Math.hypot(cb.x, cb.y);
+            if (mag === 0) return null;
+            const cos = Math.min(Math.max(dot / mag, -1), 1);
+            return Math.acos(cos) * (180 / Math.PI);
+        }
+
+        function keypointMap(keypoints) {
+            const map = {};
+            keypoints.forEach((kp) => {
+                map[kp.name] = kp;
+            });
+            return map;
+        }
+
+        function getSideMetrics(map, side) {
+            const shoulder = map[`${side}_shoulder`];
+            const elbow = map[`${side}_elbow`];
+            const wrist = map[`${side}_wrist`];
+            const hip = map[`${side}_hip`];
+            const knee = map[`${side}_knee`];
+            const ankle = map[`${side}_ankle`];
+
+            const needed = [shoulder, elbow, wrist, hip, knee, ankle];
+            if (needed.some((kp) => !kp || kp.score < CONF.minConfidence)) {
+                return null;
+            }
+
+            const elbowAngle = angleAt(shoulder, elbow, wrist);
+            const kneeAngle = angleAt(hip, knee, ankle);
+            if (elbowAngle === null || kneeAngle === null) return null;
+
+            const wristAboveShoulder = wrist.y < shoulder.y - CONF.overheadMargin;
+            const elbowStraight = elbowAngle >= CONF.elbowStraightThresh;
+            const legLength = Math.hypot(hip.x - ankle.x, hip.y - ankle.y);
+            const ankleLifted = ankle.y < hip.y + legLength * CONF.feetLiftFactor;
+            const kneeBent = kneeAngle <= CONF.kneeBentThresh;
+            const feetOff = kneeBent || ankleLifted;
+
+            return {
+                elbowAngle,
+                kneeAngle,
+                wristAboveShoulder,
+                elbowStraight,
+                feetOff,
+                confidence: (shoulder.score + elbow.score + wrist.score + hip.score + knee.score + ankle.score) / 6
+            };
+        }
+
+        function pickBestSide(map) {
+            const left = getSideMetrics(map, 'left');
+            const right = getSideMetrics(map, 'right');
+            if (!left && !right) return null;
+            if (left && right) {
+                return left.confidence >= right.confidence ? { side: 'left', metrics: left } : { side: 'right', metrics: right };
+            }
+            return left ? { side: 'left', metrics: left } : { side: 'right', metrics: right };
+        }
+
+        function updateLiveStatus({ status, durationMs, armsText, feetText, confidenceText, elbowAngleText, kneeAngleText }) {
+            dom.statusDisplay.innerText = status;
+            dom.durationDisplay.innerText = formatSeconds(durationMs);
+            dom.detectionState.innerText = status;
+            dom.armsState.innerText = armsText;
+            dom.feetState.innerText = feetText;
+            dom.elbowAngleState.innerText = elbowAngleText ?? '-';
+            dom.kneeAngleState.innerText = kneeAngleText ?? '-';
+            dom.confidenceState.innerText = confidenceText;
+        }
+
+        function resetSessionState() {
+            state.sessionStartPerf = performance.now();
+            state.sessionStartEpoch = Date.now();
+            state.lastSampleTime = 0;
+            state.frames = [];
+            state.hangStartTime = null;
+            state.hangEndTime = null;
+            state.hangCandidateCount = 0;
+            state.notHangCandidateCount = 0;
+            updateLiveStatus({
+                status: 'Ready',
+                durationMs: 0,
+                armsText: '-',
+                feetText: '-',
+                confidenceText: '-',
+                elbowAngleText: '-',
+                kneeAngleText: '-'
+            });
+        }
+
+        async function setupDetector() {
+            if (state.detector) return state.detector;
+            dom.loadingText.innerText = 'Loading MoveNet model…';
+            const detectorConfig = {
+                modelType: poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING
+            };
+            state.detector = await poseDetection.createDetector(
+                poseDetection.SupportedModels.MoveNet,
+                detectorConfig
+            );
+            return state.detector;
+        }
+
+        async function startDetection() {
+            if (state.isDetecting) return;
+            dom.loadingOverlay.classList.remove('hidden');
+            dom.instructionOverlay.classList.add('hidden');
+            dom.statsOverlay.classList.remove('hidden');
+            dom.stopBtn.disabled = true;
+            dom.resetBtn.disabled = true;
+
+            await setupDetector();
+
+            dom.loadingText.innerText = 'Starting camera…';
+            try {
+                state.videoStream = await navigator.mediaDevices.getUserMedia({
+                    video: { width: CONF.videoWidth, height: CONF.videoHeight, facingMode: CONF.facingMode },
+                    audio: false
+                });
+            } catch (error) {
+                dom.loadingOverlay.classList.add('hidden');
+                dom.instructionOverlay.classList.remove('hidden');
+                dom.statsOverlay.classList.add('hidden');
+                alert('Camera access failed. Please allow camera permissions and try again.');
+                return;
+            }
+
+            dom.video.srcObject = state.videoStream;
+            await new Promise((resolve) => {
+                dom.video.onloadedmetadata = () => resolve();
+            });
+
+            dom.canvas.width = dom.video.videoWidth;
+            dom.canvas.height = dom.video.videoHeight;
+
+            resetSessionState();
+            state.isDetecting = true;
+            dom.stopBtn.disabled = false;
+            dom.resetBtn.disabled = false;
+            dom.loadingOverlay.classList.add('hidden');
+            dom.statsOverlay.classList.remove('hidden');
+
+            detectLoop();
+        }
+
+        function stopDetection() {
+            if (!state.isDetecting) return;
+            state.isDetecting = false;
+            if (state.animationFrameId) {
+                cancelAnimationFrame(state.animationFrameId);
+                state.animationFrameId = null;
+            }
+            if (state.videoStream) {
+                state.videoStream.getTracks().forEach((track) => track.stop());
+                state.videoStream = null;
+            }
+            dom.statsOverlay.classList.add('hidden');
+            dom.instructionOverlay.classList.remove('hidden');
+            dom.stopBtn.disabled = true;
+            dom.resetBtn.disabled = true;
+
+            const session = buildSessionFromState();
+            if (session) {
+                saveSession(session).then(loadSessions);
+            }
+        }
+
+        function resetLiveSession() {
+            if (!state.isDetecting) return;
+            resetSessionState();
+        }
+
+        function drawPose(ctx, keypoints, scaleX, scaleY) {
+            ctx.save();
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = 'rgba(212, 175, 55, 0.85)';
+            ctx.fillStyle = 'rgba(30, 26, 20, 0.85)';
+
+            SKELETON.forEach(([a, b]) => {
+                const kpA = keypoints.find((kp) => kp.name === a);
+                const kpB = keypoints.find((kp) => kp.name === b);
+                if (!kpA || !kpB) return;
+                if (kpA.score < CONF.minConfidence || kpB.score < CONF.minConfidence) return;
+                ctx.beginPath();
+                ctx.moveTo(kpA.x * scaleX, kpA.y * scaleY);
+                ctx.lineTo(kpB.x * scaleX, kpB.y * scaleY);
+                ctx.stroke();
+            });
+
+            keypoints.forEach((kp) => {
+                if (kp.score < CONF.minConfidence) return;
+                ctx.beginPath();
+                ctx.arc(kp.x * scaleX, kp.y * scaleY, 4, 0, Math.PI * 2);
+                ctx.fill();
+            });
+            ctx.restore();
+        }
+
+        function updateHangState(isHang, timestamp) {
+            if (isHang) {
+                state.hangCandidateCount += 1;
+                state.notHangCandidateCount = 0;
+            } else {
+                state.notHangCandidateCount += 1;
+                state.hangCandidateCount = 0;
+            }
+
+            if (state.hangCandidateCount >= 3 && state.hangStartTime === null) {
+                state.hangStartTime = timestamp;
+                state.hangEndTime = null;
+            }
+
+            if (state.notHangCandidateCount >= 3 && state.hangStartTime !== null && state.hangEndTime === null) {
+                state.hangEndTime = timestamp;
+            }
+
+            if (isHang && state.hangEndTime !== null) {
+                state.hangEndTime = null;
+            }
+        }
+
+        function computeDuration(nowMs) {
+            if (state.hangStartTime === null) return 0;
+            const endTime = state.hangEndTime ?? nowMs;
+            return Math.max(0, endTime - state.hangStartTime);
+        }
+
+        async function detectLoop() {
+            if (!state.isDetecting) return;
+            state.animationFrameId = requestAnimationFrame(detectLoop);
+
+            if (dom.video.readyState < 3) return;
+
+            const nowMs = performance.now() - state.sessionStartPerf;
+            const poses = await state.detector.estimatePoses(dom.video);
+            const ctx = dom.canvas.getContext('2d');
+            ctx.clearRect(0, 0, dom.canvas.width, dom.canvas.height);
+            ctx.drawImage(dom.video, 0, 0, dom.canvas.width, dom.canvas.height);
+
+            if (!poses.length) {
+                updateHangState(false, nowMs);
+                updateLiveStatus({
+                    status: 'Not detected',
+                    durationMs: computeDuration(nowMs),
+                    armsText: '-',
+                    feetText: '-',
+                    confidenceText: '-',
+                    elbowAngleText: '-',
+                    kneeAngleText: '-'
+                });
+                return;
+            }
+
+            const pose = poses[0];
+            drawPose(ctx, pose.keypoints, 1, 1);
+
+            const map = keypointMap(pose.keypoints);
+            const best = pickBestSide(map);
+
+            if (!best) {
+                updateHangState(false, nowMs);
+                updateLiveStatus({
+                    status: 'Not detected',
+                    durationMs: computeDuration(nowMs),
+                    armsText: '-',
+                    feetText: '-',
+                    confidenceText: '-',
+                    elbowAngleText: '-',
+                    kneeAngleText: '-'
+                });
+                return;
+            }
+            const { metrics } = best;
+            const isHang = metrics.elbowStraight && metrics.wristAboveShoulder && metrics.feetOff;
+            updateHangState(isHang, nowMs);
+
+            if (nowMs - state.lastSampleTime >= CONF.sampleIntervalMs) {
+                state.lastSampleTime = nowMs;
+                state.frames.push({
+                    t: nowMs,
+                    keypoints: pose.keypoints.map((kp) => ({
+                        name: kp.name,
+                        x: kp.x,
+                        y: kp.y,
+                        score: kp.score
+                    })),
+                    score: pose.score ?? 0
+                });
+            }
+
+            updateLiveStatus({
+                status: isHang ? 'Hanging' : 'Ready',
+                durationMs: computeDuration(nowMs),
+                armsText: metrics.elbowStraight ? 'Straight' : 'Bent',
+                feetText: metrics.feetOff ? 'Off ground' : 'Down',
+                confidenceText: metrics.confidence.toFixed(2),
+                elbowAngleText: `${metrics.elbowAngle.toFixed(0)}°`,
+                kneeAngleText: `${metrics.kneeAngle.toFixed(0)}°`
+            });
+        }
+
+        function buildSessionFromState() {
+            if (!state.frames.length) return null;
+            const lastFrameTime = state.frames[state.frames.length - 1].t;
+            const hangStartTime = state.hangStartTime ?? 0;
+            const hangEndTime = state.hangEndTime ?? lastFrameTime;
+            const durationMs = state.hangStartTime === null ? 0 : Math.max(0, hangEndTime - hangStartTime);
+
+            const startIndex = state.hangStartTime === null
+                ? 0
+                : state.frames.findIndex((frame) => frame.t >= hangStartTime);
+            let endIndex = state.frames.length - 1;
+            for (let i = state.frames.length - 1; i >= 0; i -= 1) {
+                if (state.frames[i].t <= hangEndTime) {
+                    endIndex = i;
+                    break;
+                }
+            }
+
+            return {
+                id: crypto.randomUUID ? crypto.randomUUID() : `session-${Date.now()}`,
+                startedAt: state.sessionStartEpoch,
+                durationMs,
+                startFrameIndex: startIndex < 0 ? 0 : startIndex,
+                endFrameIndex: endIndex < 0 ? state.frames.length - 1 : endIndex,
+                frameWidth: dom.canvas.width,
+                frameHeight: dom.canvas.height,
+                frames: state.frames
+            };
+        }
+
+        async function openDb() {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open('deadhang-monitor', 1);
+                request.onupgradeneeded = (event) => {
+                    const db = event.target.result;
+                    if (!db.objectStoreNames.contains('sessions')) {
+                        db.createObjectStore('sessions', { keyPath: 'id' });
+                    }
+                };
+                request.onsuccess = () => resolve(request.result);
+                request.onerror = () => reject(request.error);
+            });
+        }
+
+        async function saveSession(session) {
+            const db = await openDb();
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction('sessions', 'readwrite');
+                tx.objectStore('sessions').put(session);
+                tx.oncomplete = () => resolve();
+                tx.onerror = () => reject(tx.error);
+            });
+        }
+
+        async function deleteSession(id) {
+            const db = await openDb();
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction('sessions', 'readwrite');
+                tx.objectStore('sessions').delete(id);
+                tx.oncomplete = () => resolve();
+                tx.onerror = () => reject(tx.error);
+            });
+        }
+
+        async function deleteAllSessions() {
+            const db = await openDb();
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction('sessions', 'readwrite');
+                tx.objectStore('sessions').clear();
+                tx.oncomplete = () => resolve();
+                tx.onerror = () => reject(tx.error);
+            });
+        }
+
+        async function loadSessions() {
+            const db = await openDb();
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction('sessions', 'readonly');
+                const request = tx.objectStore('sessions').getAll();
+                request.onsuccess = () => {
+                    const sessions = request.result || [];
+                    renderHistory(sessions.sort((a, b) => b.startedAt - a.startedAt));
+                    resolve();
+                };
+                request.onerror = () => reject(request.error);
+            });
+        }
+
+        function renderHistory(sessions) {
+            dom.historyList.innerHTML = '';
+            if (!sessions.length) {
+                dom.historyList.innerHTML = '<div style="color:var(--ink-soft); font-size:0.9rem;">No sessions yet.</div>';
+                dom.reviewPanel.classList.remove('active');
+                state.selectedSession = null;
+                return;
+            }
+
+            sessions.forEach((session) => {
+                const item = document.createElement('div');
+                item.className = 'history-item';
+                const date = new Date(session.startedAt);
+                const label = `${date.toLocaleDateString()} ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+                item.innerHTML = `
+                    <div>
+                        <div style="font-weight:600;">${label}</div>
+                        <div style="font-size:0.8rem; color:var(--ink-soft);">${formatSeconds(session.durationMs)}</div>
+                    </div>
+                `;
+                const btn = document.createElement('button');
+                btn.className = 'secondary';
+                btn.innerText = 'Review';
+                btn.addEventListener('click', () => openReview(session));
+                item.appendChild(btn);
+                dom.historyList.appendChild(item);
+            });
+        }
+
+        function openReview(session) {
+            if (state.isDetecting) return;
+            state.selectedSession = session;
+            dom.reviewPanel.classList.add('active');
+            dom.reviewMeta.innerText = `Session ${new Date(session.startedAt).toLocaleString()}`;
+
+            const maxIndex = Math.max(0, session.frames.length - 1);
+            if (session.startFrameIndex === undefined || session.startFrameIndex === null) {
+                session.startFrameIndex = 0;
+            }
+            if (session.endFrameIndex === undefined || session.endFrameIndex === null) {
+                session.endFrameIndex = maxIndex;
+            }
+            dom.scrubRange.max = String(maxIndex);
+            dom.scrubRange.value = String(session.startFrameIndex ?? 0);
+            dom.startTimeLabel.innerText = formatSeconds(session.frames[session.startFrameIndex]?.t ?? 0);
+            dom.endTimeLabel.innerText = formatSeconds(session.frames[session.endFrameIndex]?.t ?? 0);
+            updateReviewDuration();
+            updateScrubFrame();
+        }
+
+        function updateReviewDuration() {
+            const session = state.selectedSession;
+            if (!session) return;
+            const startTime = session.frames[session.startFrameIndex]?.t ?? 0;
+            const endTime = session.frames[session.endFrameIndex]?.t ?? startTime;
+            const duration = Math.max(0, endTime - startTime);
+            dom.reviewDuration.innerText = formatSeconds(duration);
+        }
+
+        function updateScrubFrame() {
+            const session = state.selectedSession;
+            if (!session) return;
+            const index = Number(dom.scrubRange.value);
+            const frame = session.frames[index];
+            if (!frame) return;
+            dom.scrubTime.innerText = formatSeconds(frame.t);
+
+            const ctx = dom.canvas.getContext('2d');
+            ctx.clearRect(0, 0, dom.canvas.width, dom.canvas.height);
+            ctx.fillStyle = 'rgba(253, 251, 212, 0.6)';
+            ctx.fillRect(0, 0, dom.canvas.width, dom.canvas.height);
+            const scaleX = dom.canvas.width / session.frameWidth;
+            const scaleY = dom.canvas.height / session.frameHeight;
+            drawPose(ctx, frame.keypoints, scaleX, scaleY);
+        }
+
+        function setStartMarker() {
+            const session = state.selectedSession;
+            if (!session) return;
+            session.startFrameIndex = Number(dom.scrubRange.value);
+            if (session.startFrameIndex > session.endFrameIndex) {
+                session.endFrameIndex = session.startFrameIndex;
+            }
+            dom.startTimeLabel.innerText = formatSeconds(session.frames[session.startFrameIndex]?.t ?? 0);
+            dom.endTimeLabel.innerText = formatSeconds(session.frames[session.endFrameIndex]?.t ?? 0);
+            updateReviewDuration();
+        }
+
+        function setEndMarker() {
+            const session = state.selectedSession;
+            if (!session) return;
+            session.endFrameIndex = Number(dom.scrubRange.value);
+            if (session.endFrameIndex < session.startFrameIndex) {
+                session.startFrameIndex = session.endFrameIndex;
+            }
+            dom.endTimeLabel.innerText = formatSeconds(session.frames[session.endFrameIndex]?.t ?? 0);
+            dom.startTimeLabel.innerText = formatSeconds(session.frames[session.startFrameIndex]?.t ?? 0);
+            updateReviewDuration();
+        }
+
+        async function saveAdjustments() {
+            const session = state.selectedSession;
+            if (!session) return;
+            const startTime = session.frames[session.startFrameIndex]?.t ?? 0;
+            const endTime = session.frames[session.endFrameIndex]?.t ?? startTime;
+            session.durationMs = Math.max(0, endTime - startTime);
+            await saveSession(session);
+            await loadSessions();
+            dom.reviewDuration.innerText = formatSeconds(session.durationMs);
+        }
+
+        async function handleDeleteSession() {
+            const session = state.selectedSession;
+            if (!session) return;
+            if (!confirm('Delete this session?')) return;
+            await deleteSession(session.id);
+            state.selectedSession = null;
+            dom.reviewPanel.classList.remove('active');
+            await loadSessions();
+        }
+
+        dom.startBtn.addEventListener('click', startDetection);
+        dom.stopBtn.addEventListener('click', stopDetection);
+        dom.resetBtn.addEventListener('click', resetLiveSession);
+        dom.refreshHistoryBtn.addEventListener('click', loadSessions);
+        dom.deleteAllBtn.addEventListener('click', async () => {
+            if (!confirm('Delete all sessions?')) return;
+            await deleteAllSessions();
+            await loadSessions();
+        });
+        dom.scrubRange.addEventListener('input', updateScrubFrame);
+        dom.setStartBtn.addEventListener('click', setStartMarker);
+        dom.setEndBtn.addEventListener('click', setEndMarker);
+        dom.saveAdjustBtn.addEventListener('click', saveAdjustments);
+        dom.deleteSessionBtn.addEventListener('click', handleDeleteSession);
+
+        window.addEventListener('load', () => {
+            initSettings();
+            loadSessions();
+            dom.canvas.width = CONF.videoWidth;
+            dom.canvas.height = CONF.videoHeight;
+            const ctx = dom.canvas.getContext('2d');
+            ctx.fillStyle = 'rgba(253, 251, 212, 0.6)';
+            ctx.fillRect(0, 0, dom.canvas.width, dom.canvas.height);
+        });
+
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('sw.js').catch(() => {});
+        }
+    </script>
+</body>
+</html>

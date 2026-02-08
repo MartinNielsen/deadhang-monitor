@@ -1,0 +1,17 @@
+{
+  "name": "Deadhang Monitor",
+  "short_name": "Deadhang",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#FDFBD4",
+  "theme_color": "#D4AF37",
+  "description": "Track dead hang duration with real-time AI pose detection.",
+  "icons": [
+    {
+      "src": "app-icon.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
