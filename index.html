@@ -78,6 +78,13 @@
             min-height: 120px;
         }
 
+        header.timer-active {
+            padding: 12px 16px;
+            min-height: 160px;
+            align-items: center;
+            justify-content: center;
+        }
+
         header h1 {
             font-family: 'Cormorant Garamond', serif;
             font-size: clamp(1.8rem, 2.4vw, 2.5rem);
@@ -110,7 +117,7 @@
 
         .header-timer span {
             font-family: 'Cormorant Garamond', serif;
-            font-size: clamp(2.6rem, 6vw, 4.6rem);
+            font-size: clamp(3.6rem, 9vw, 6.6rem);
             letter-spacing: 0.08em;
             color: var(--accent-dark);
         }
@@ -253,6 +260,10 @@
             border-radius: 22px;
             padding: 18px;
             box-shadow: 0 20px 50px rgba(30, 26, 20, 0.1);
+        }
+
+        .panel-card.hidden {
+            display: none;
         }
 
         .panel-card h2 {
@@ -407,7 +418,7 @@
 <body>
     <div class="version-tag">v.__DEPLOY_VERSION__</div>
     <div class="app-shell">
-        <header>
+        <header id="appHeader">
             <div class="header-default" id="headerDefault">
                 <h1>Deadhang Monitor</h1>
                 <p>Track dead hang duration using real-time pose detection. All processing stays in your browser.</p>
@@ -448,7 +459,7 @@
             </div>
 
             <div class="side-panel">
-                <div class="panel-card">
+                <div class="panel-card hidden" id="livePanel">
                     <h2>Live Session</h2>
                     <div class="status-line">Detection: <strong id="detectionState">Idle</strong></div>
                     <div class="status-line">Arms: <strong id="armsState">-</strong></div>
@@ -460,14 +471,6 @@
 
                 <div class="panel-card">
                     <h2>History</h2>
-                    <div class="history-list" id="historyList">
-                        <div style="color:var(--ink-soft); font-size:0.9rem;">No sessions yet.</div>
-                    </div>
-                    <div style="margin-top:10px; display:flex; gap:10px; flex-wrap:wrap;">
-                        <button class="secondary" id="refreshHistoryBtn">Refresh</button>
-                        <button class="danger" id="deleteAllBtn">Delete All</button>
-                    </div>
-
                     <div class="review-panel" id="reviewPanel">
                         <div class="small-pill" id="reviewMeta">Session</div>
                         <div class="timeline">
@@ -491,6 +494,13 @@
                                 <span>End: <strong id="endTimeLabel">0.0s</strong></span>
                             </div>
                         </div>
+                    </div>
+                    <div class="history-list" id="historyList" style="margin-top:12px;">
+                        <div style="color:var(--ink-soft); font-size:0.9rem;">No sessions yet.</div>
+                    </div>
+                    <div style="margin-top:10px; display:flex; gap:10px; flex-wrap:wrap;">
+                        <button class="secondary" id="refreshHistoryBtn">Refresh</button>
+                        <button class="danger" id="deleteAllBtn">Delete All</button>
                     </div>
                 </div>
 
@@ -610,6 +620,8 @@
             headerDefault: document.getElementById('headerDefault'),
             headerTimer: document.getElementById('headerTimer'),
             headerTimerValue: document.getElementById('headerTimerValue'),
+            appHeader: document.getElementById('appHeader'),
+            livePanel: document.getElementById('livePanel'),
             video: document.getElementById('video'),
             canvas: document.getElementById('output'),
             historyList: document.getElementById('historyList'),
@@ -687,10 +699,12 @@
             if (!state.showHeaderTimer) {
                 dom.headerTimer.classList.remove('active');
                 dom.headerDefault.style.display = 'grid';
+                dom.appHeader.classList.remove('timer-active');
                 return;
             }
             dom.headerTimer.classList.add('active');
             dom.headerDefault.style.display = 'none';
+            dom.appHeader.classList.add('timer-active');
             dom.headerTimerValue.innerText = formatTimer(durationMs);
         }
 
@@ -950,6 +964,7 @@
             dom.resetBtn.disabled = false;
             dom.loadingOverlay.classList.add('hidden');
             dom.statsOverlay.classList.remove('hidden');
+            dom.livePanel.classList.remove('hidden');
 
             if (state.soundEnabled) {
                 ensureAudioContext();
@@ -974,6 +989,7 @@
             dom.instructionOverlay.classList.remove('hidden');
             dom.stopBtn.disabled = true;
             dom.resetBtn.disabled = true;
+            dom.livePanel.classList.add('hidden');
 
             state.showHeaderTimer = false;
             updateHeaderTimer(0);
@@ -1402,6 +1418,7 @@
             const ctx = dom.canvas.getContext('2d');
             ctx.fillStyle = 'rgba(253, 251, 212, 0.6)';
             ctx.fillRect(0, 0, dom.canvas.width, dom.canvas.height);
+            dom.livePanel.classList.add('hidden');
         });
 
         if ('serviceWorker' in navigator) {

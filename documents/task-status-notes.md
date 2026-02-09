@@ -44,3 +44,11 @@ Use this file to append notes at the end of each completed task. Keep entries co
 - Follow-ups / next steps: Verify header swap on first hang; confirm tone stays off during slight movement; validate marker positions on review slider.
 - Open questions / risks: None beyond audio autoplay quirks.
 - Testing / verification: Not run yet.
+
+- Date: 2026-02-08
+- Task completed: Hide Live Session panel until camera starts; enlarge header timer and reduce padding; move history list below review controls.
+- Files touched: /Users/mdn/Projects/deadhang-monitor/index.html
+- Decisions / rationale: Header timer uses timer-active class for large text and tighter padding; Live Session panel hidden by default and shown only while detecting; history list moved below review/timeline controls per UX request.
+- Follow-ups / next steps: Verify header timer size on mobile; ensure history list layout feels balanced with review panel.
+- Open questions / risks: None.
+- Testing / verification: Not run yet.
