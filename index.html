@@ -180,6 +180,14 @@
             display: none;
         }
 
+        .overlay.review-mode {
+            background: rgba(30, 26, 20, 0.2);
+        }
+
+        .overlay.review-mode .instruction-text {
+            display: none;
+        }
+
         .overlay button {
             margin-top: 16px;
         }
@@ -201,6 +209,10 @@
 
         .stats-overlay.hidden {
             display: none;
+        }
+
+        .hidden {
+            display: none !important;
         }
 
         .stats-overlay span {
@@ -452,6 +464,7 @@
                     <canvas id="output"></canvas>
                 </div>
                 <div class="controls">
+                    <button id="startControlBtn" class="secondary hidden">Start</button>
                     <button id="stopBtn" class="danger" disabled>Stop</button>
                     <button id="resetBtn" class="secondary" disabled>Reset</button>
                     <button id="soundBtn" class="secondary">Sound: Off</button>
@@ -594,6 +607,7 @@
             currentIsHang: false,
             hangActive: false,
             showHeaderTimer: false,
+            reviewMode: false,
             soundEnabled: false,
             audioContext: null,
             toneOscillator: null,
@@ -639,6 +653,7 @@
             startTimeLabel: document.getElementById('startTimeLabel'),
             endTimeLabel: document.getElementById('endTimeLabel'),
             soundBtn: document.getElementById('soundBtn'),
+            startControlBtn: document.getElementById('startControlBtn'),
             startMarker: document.getElementById('startMarker'),
             endMarker: document.getElementById('endMarker'),
             minConfidenceInput: document.getElementById('minConfidenceInput'),
@@ -714,6 +729,19 @@
                 return;
             }
             setToneActive(!state.hangActive);
+        }
+
+        function setReviewMode(active) {
+            state.reviewMode = active;
+            if (active) {
+                dom.instructionOverlay.classList.add('review-mode');
+                dom.startControlBtn.classList.remove('hidden');
+                dom.stopBtn.classList.add('hidden');
+            } else {
+                dom.instructionOverlay.classList.remove('review-mode');
+                dom.startControlBtn.classList.add('hidden');
+                dom.stopBtn.classList.remove('hidden');
+            }
         }
 
         function settingsSnapshot() {
@@ -959,6 +987,7 @@
 
             resetSessionState();
             state.showHeaderTimer = false;
+            setReviewMode(false);
             state.isDetecting = true;
             dom.stopBtn.disabled = false;
             dom.resetBtn.disabled = false;
@@ -990,6 +1019,7 @@
             dom.stopBtn.disabled = true;
             dom.resetBtn.disabled = true;
             dom.livePanel.classList.add('hidden');
+            setReviewMode(false);
 
             state.showHeaderTimer = false;
             updateHeaderTimer(0);
@@ -1248,6 +1278,7 @@
                 dom.historyList.innerHTML = '<div style="color:var(--ink-soft); font-size:0.9rem;">No sessions yet.</div>';
                 dom.reviewPanel.classList.remove('active');
                 state.selectedSession = null;
+                setReviewMode(false);
                 return;
             }
 
@@ -1274,6 +1305,7 @@
         function openReview(session) {
             if (state.isDetecting) return;
             state.selectedSession = session;
+            setReviewMode(true);
             dom.reviewPanel.classList.add('active');
             dom.reviewMeta.innerText = `Session ${new Date(session.startedAt).toLocaleString()}`;
 
@@ -1373,6 +1405,7 @@
             await deleteSession(session.id);
             state.selectedSession = null;
             dom.reviewPanel.classList.remove('active');
+            setReviewMode(false);
             await loadSessions();
         }
 
@@ -1404,6 +1437,7 @@
             await loadSessions();
         });
         dom.soundBtn.addEventListener('click', toggleSound);
+        dom.startControlBtn.addEventListener('click', startDetection);
         dom.scrubRange.addEventListener('input', updateScrubFrame);
         dom.setStartBtn.addEventListener('click', setStartMarker);
         dom.setEndBtn.addEventListener('click', setEndMarker);
@@ -1419,6 +1453,7 @@
             ctx.fillStyle = 'rgba(253, 251, 212, 0.6)';
             ctx.fillRect(0, 0, dom.canvas.width, dom.canvas.height);
             dom.livePanel.classList.add('hidden');
+            setReviewMode(false);
         });
 
         if ('serviceWorker' in navigator) {

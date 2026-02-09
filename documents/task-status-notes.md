@@ -52,3 +52,11 @@ Use this file to append notes at the end of each completed task. Keep entries co
 - Follow-ups / next steps: Verify header timer size on mobile; ensure history list layout feels balanced with review panel.
 - Open questions / risks: None.
 - Testing / verification: Not run yet.
+
+- Date: 2026-02-08
+- Task completed: Review mode tweaks (show Start control, hide Stop), hide instruction text while reviewing, reduce dim overlay, and keep history list below review controls.
+- Files touched: /Users/mdn/Projects/deadhang-monitor/index.html
+- Decisions / rationale: Added review mode toggles to swap Stop/Start controls; instruction overlay gains review-mode class to remove help text and reduce dimming for clearer stick figure.
+- Follow-ups / next steps: Verify review mode toggles on openReview and clears on start/stop; validate overlay visibility in review.
+- Open questions / risks: None.
+- Testing / verification: Not run yet.
