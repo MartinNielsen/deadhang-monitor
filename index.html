@@ -858,9 +858,17 @@
             return Math.acos(cos) * (180 / Math.PI);
         }
 
+        function normalizeKeypoints(keypoints) {
+            return keypoints.map((kp, index) => {
+                const name = kp.name ?? kp.part ?? KEYPOINTS[index];
+                return { ...kp, name };
+            });
+        }
+
         function keypointMap(keypoints) {
             const map = {};
             keypoints.forEach((kp) => {
+                if (!kp.name) return;
                 map[kp.name] = kp;
             });
             return map;
@@ -1137,9 +1145,10 @@
             }
 
             const pose = poses[0];
-            drawPose(ctx, pose.keypoints, 1, 1);
+            const keypoints = normalizeKeypoints(pose.keypoints);
+            drawPose(ctx, keypoints, 1, 1);
 
-            const map = keypointMap(pose.keypoints);
+            const map = keypointMap(keypoints);
             const best = pickBestSide(map);
 
             if (!best) {
@@ -1167,7 +1176,7 @@
                 state.lastSampleTime = nowMs;
                 state.frames.push({
                     t: nowMs,
-                    keypoints: pose.keypoints.map((kp) => ({
+                    keypoints: keypoints.map((kp) => ({
                         name: kp.name,
                         x: kp.x,
                         y: kp.y,
