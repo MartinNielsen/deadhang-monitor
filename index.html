@@ -192,6 +192,10 @@
             display: none;
         }
 
+        .overlay.scrubbing .instruction-text {
+            display: none;
+        }
+
         .overlay button {
             margin-top: 16px;
         }
@@ -449,8 +453,10 @@
                 <div class="viewer-container">
                     <div class="overlay" id="instructionOverlay">
                         <div>
-                            <div style="font-size:1.05rem; font-weight:600;">Position the camera so your full body is visible.</div>
-                            <div style="margin-top:8px; font-size:0.9rem; opacity:0.85;">Press Start, hang, then Stop to save the session.</div>
+                            <div class="instruction-text">
+                                <div style="font-size:1.05rem; font-weight:600;">Position the camera so your full body is visible.</div>
+                                <div style="margin-top:8px; font-size:0.9rem; opacity:0.85;">Press Start, hang, then Stop to save the session.</div>
+                            </div>
                             <button id="startBtn">Start</button>
                         </div>
                     </div>
@@ -1451,6 +1457,18 @@
         });
         dom.soundBtn.addEventListener('click', toggleSound);
         dom.startControlBtn.addEventListener('click', startDetection);
+        dom.scrubRange.addEventListener('pointerdown', () => {
+            dom.instructionOverlay.classList.add('scrubbing');
+        });
+        const stopScrubbing = () => {
+            dom.instructionOverlay.classList.remove('scrubbing');
+        };
+        dom.scrubRange.addEventListener('pointerup', stopScrubbing);
+        dom.scrubRange.addEventListener('pointercancel', stopScrubbing);
+        dom.scrubRange.addEventListener('touchend', stopScrubbing);
+        dom.scrubRange.addEventListener('touchcancel', stopScrubbing);
+        window.addEventListener('mouseup', stopScrubbing);
+        window.addEventListener('touchend', stopScrubbing);
         dom.scrubRange.addEventListener('input', updateScrubFrame);
         dom.setStartBtn.addEventListener('click', setStartMarker);
         dom.setEndBtn.addEventListener('click', setEndMarker);
